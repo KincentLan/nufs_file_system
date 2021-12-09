@@ -59,7 +59,6 @@ dirent_t** get_directory_blocks(inode_t *dd) {
     return dir_blocks;
 }
 
-
 int directory_lookup(inode_t *dd, const char *name) {
     if (dd->mode == 0) {
         perror("Directory not found.\n");
@@ -76,12 +75,13 @@ int directory_lookup(inode_t *dd, const char *name) {
         for (int j = 0; j < num_entries && j < total_entries; j++) {
             dirent_t current_dir = current_dir_block[j];
             if (strcmp(current_dir.name, name) == 0) {
+                free(dir_blocks);
                 return current_dir.inum;
             }
         }
         total_entries -= num_entries;
     }
-    
+    free(dir_blocks);
     return -1;
 }
 
@@ -122,6 +122,24 @@ int directory_put(inode_t *dd, const char *name, int inum) {
     dirent_t* next_dir = (dirent_t *)(current_dir_block + position);
     strcpy(next_dir->name, name);
     next_dir->inum = inum;
+    free(dir_blocks);
+
+    inode_t* added_dd = get_inode(inum);
+    if (added_dd->mode == 1) {
+        if (grow_inode(added_dd, sizeof(dirent_t)) == -1) {
+            perror("Cannot allocate more memory.\n");
+            return -1;
+        }
+        int added_num_dirs = needed_datablocks(added_dd->size, 0);
+
+        dirent_t** added_dir_blocks = get_directory_blocks(added_dd);
+        void* added_dir_block = (void*) dir_blocks[added_num_dirs - 1];
+        int added_position = added_dd->size - sizeof(dirent_t) - (added_num_dirs - 1) * BLOCK_SIZE;
+        dirent_t* added_next_dir = (dirent_t *)(added_dir_block + added_position);
+        strcpy(added_next_dir->name, "..");
+        added_next_dir->inum = dd->fid;
+        free(added_dir_blocks);
+    }
 
     return 0;
 }
@@ -193,6 +211,7 @@ int directory_delete(inode_t *dd, const char *name) {
         block += 1;
     }
 
+    free(dir_blocks);
     return shrink_inode(dd, sizeof(dirent_t));
 }
 
@@ -207,9 +226,11 @@ int directory_delete_recursive(inode_t *dd) {
     for (int i = 0; i < num_dirs; i++) {
         dirent_t* current_dir_block = dir_blocks[i];
         for (int j = 0; j < num_entries && j < total_entries; j++) {
-            if (i == 0 && j == 0) { continue; }
             dirent_t current_dir = current_dir_block[j];
             int inode_no = current_dir.inum;
+            if (strcmp(current_dir.name, ".") == 0 || strcmp(current_dir.name, "..") == 0) {
+                continue;
+            }
             inode_t* inode = get_inode(inode_no);
             if (inode->mode == 0) {
                 free_inode(0);
@@ -222,7 +243,7 @@ int directory_delete_recursive(inode_t *dd) {
     }
 
     free_inode(dir_blocks[0][0].inum);
-    
+    free(dir_blocks);
     return 0;
 }
 
@@ -251,7 +272,7 @@ slist_t *get_directory_list(inode_t* dd) {
         }
         total_entries -= num_entries;
     }
-    
+    free(dir_blocks);
     return list;
 }
 

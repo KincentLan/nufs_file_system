@@ -66,18 +66,30 @@ int nufs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
     printf("Directory is empty.\n");
   }
 
+  rv = nufs_getattr(path, &st);
+  filler(buf, ".", &st, 0);
   while (dir_list != NULL) {
-    rv = nufs_getattr("/", &st);
     assert(rv == 0);
+    if (strcmp(dir_list->data, ".") == 0 || strcmp(dir_list->data, "..") == 0) {
+      dir_list = dir_list->next;
+    }
+    else {
 
-    filler(buf, ".", &st, 0);
+      char *result = malloc(strlen(path) + strlen(dir_list->data) + 2);
+      strcpy(result, path);
+      if (path[strlen(path) - 1] != '/') {
+        strcat(result, "/");
+      }
+      strcat(result, dir_list->data);
+      rv = nufs_getattr(result, &st);
+      assert(rv == 0);
+      filler(buf, result, &st, 0);
+      free(result);
+      dir_list = dir_list->next;
+      
+    }
+    
   }
-
-
-
-  rv = nufs_getattr("/hello.txt", &st);
-  assert(rv == 0);
-  filler(buf, "hello.txt", &st, 0);
 
   printf("readdir(%s) -> %d\n", path, rv);
   return 0;
