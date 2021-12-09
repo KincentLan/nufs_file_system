@@ -62,14 +62,10 @@ int main(int argc, char **argv){
     printf("Tree look up /side/last directory: %d\n", tree_lookup("/side/last"));
 
     printf("\n\n");
-    
 
-    printf("Printing directory '/main/side/last'\n");
-    print_directory(inode_main);
-
-    printf("Looking up directory 'side' and 'last'\n");\
-    directory_lookup(inode_main, "side");
-    directory_lookup(inode_main, "last");
+    printf("Looking up directory 'side' and 'last': %d, %d\n", 
+        directory_lookup(inode_main, "side"),
+        directory_lookup(inode_side, "last"));
 
     // /main/last
     printf("Deleting 'side':\n");

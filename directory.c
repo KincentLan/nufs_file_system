@@ -32,6 +32,10 @@ int directory_create() {
     int dir_idx = alloc_inode();
     inode_t* dir = get_inode(dir_idx);
     dir->mode = 1;
+    dir->size = sizeof(dirent_t);
+    dirent_t* block = blocks_get_block(dir->block_0);
+    strcpy(block->name, ".");
+    block->inum = dir_idx;
     return dir_idx;
 }
 
@@ -203,6 +207,7 @@ int directory_delete_recursive(inode_t *dd) {
     for (int i = 0; i < num_dirs; i++) {
         dirent_t* current_dir_block = dir_blocks[i];
         for (int j = 0; j < num_entries && j < total_entries; j++) {
+            if (i == 0 && j == 0) { continue; }
             dirent_t current_dir = current_dir_block[j];
             int inode_no = current_dir.inum;
             inode_t* inode = get_inode(inode_no);
@@ -257,11 +262,11 @@ void print_directory(inode_t *dd) {
         printf("0 files in directory.\n");
         return;
     }
-    printf("-------------------------------\n");
+    printf("contents of directory:\n");
+    printf("---------------------------\n");
     while (list != NULL) {
-        printf("- %s\n", list->data);
+        printf(" %s\n", list->data);
         list = list->next;
     }
-    
-    printf("-------------------------------\n");
+    printf("---------------------------\n");
 }
