@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <sys/stat.h>
 
 #include "bitmap.h"
 #include "blocks.h"
@@ -25,7 +26,7 @@ int main(int argc, char **argv){
     printf("\n\n");
 
     printf("Creating directory 'side':\n");
-    int side_idx = directory_create();
+    int side_idx = directory_create(S_IFDIR);
     inode_t* inode_side = get_inode(side_idx);
     print_inode(inode_side);
     printf("\n\n");
@@ -44,7 +45,7 @@ int main(int argc, char **argv){
     // /main/side/last
     printf("Creating directory 'last':\n");
 
-    int last_idx = directory_create();
+    int last_idx = directory_create(S_IFDIR);
     inode_t* inode_last = get_inode(last_idx);
     printf("Adding last to main directory\n");
     directory_put(inode_side, "last", last_idx);

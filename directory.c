@@ -21,18 +21,18 @@ int directory_delete_recursive(inode_t *dd);
 int main_directory = -1;
 
 void directory_init() {
-    main_directory = directory_create();
+    main_directory = directory_create(S_IFDIR);
 }
 
 int get_main_directory() {
     return main_directory;
 }
 
-int directory_create() {
-    int dir_idx = alloc_inode();
+int directory_create(int mode) {
+    assert(S_ISDIR(mode));
+    int dir_idx = alloc_inode(mode);
     inode_t* dir = get_inode(dir_idx);
-    dir->mode = 1;
-    dir->size = sizeof(dirent_t);
+    grow_inode(dir, sizeof(dirent_t));
     dirent_t* block = blocks_get_block(dir->block_0);
     strcpy(block->name, ".");
     block->inum = dir_idx;
@@ -42,7 +42,7 @@ int directory_create() {
 dirent_t** get_directory_blocks(inode_t *dd) {
     int num_dirs = needed_datablocks(dd->size, 0);
 
-    dirent_t **dir_blocks = malloc(sizeof(dirent_t) * num_dirs);
+    dirent_t **dir_blocks = malloc(sizeof(dirent_t*) * num_dirs);
     dir_blocks[0] = blocks_get_block(dd->block_0);
 
     if (num_dirs >= 2) {
@@ -60,7 +60,7 @@ dirent_t** get_directory_blocks(inode_t *dd) {
 }
 
 int directory_lookup(inode_t *dd, const char *name) {
-    if (dd->mode == 0) {
+    if (!S_ISDIR(dd->mode)) {
         perror("Directory not found.\n");
         return -1;
     }
@@ -108,7 +108,7 @@ int tree_lookup(const char *path) {
 }
 
 int directory_put(inode_t *dd, const char *name, int inum) {
-    assert(dd->mode == 1);
+    assert(inum >= 0);
     if (grow_inode(dd, sizeof(dirent_t)) == -1) {
         perror("Cannot allocate more memory.\n");
         return -1;
@@ -125,7 +125,7 @@ int directory_put(inode_t *dd, const char *name, int inum) {
     free(dir_blocks);
 
     inode_t* added_dd = get_inode(inum);
-    if (added_dd->mode == 1) {
+    if (S_ISDIR(added_dd->mode)) {
         if (grow_inode(added_dd, sizeof(dirent_t)) == -1) {
             perror("Cannot allocate more memory.\n");
             return -1;
@@ -161,10 +161,10 @@ int directory_delete(inode_t *dd, const char *name) {
                 position = j;
                 int inode_no = current_dir.inum;
                 inode_t* inode = get_inode(inode_no);
-                if (inode->mode == 0) {
+                if (S_ISREG(inode->mode)) {
                     free_inode(0);
                 }
-                else {
+                else if (S_ISDIR(inode->mode)) {
                     directory_delete_recursive(inode);
                 }
                 break;
@@ -216,7 +216,7 @@ int directory_delete(inode_t *dd, const char *name) {
 }
 
 int directory_delete_recursive(inode_t *dd) {
-    assert(dd->mode == 1);
+    assert(S_ISDIR(dd->mode));
 
     int num_dirs = needed_datablocks(dd->size, 0);
     int num_entries = BLOCK_SIZE / sizeof(dirent_t);
@@ -232,7 +232,7 @@ int directory_delete_recursive(inode_t *dd) {
                 continue;
             }
             inode_t* inode = get_inode(inode_no);
-            if (inode->mode == 0) {
+            if (S_ISREG(inode->mode)) {
                 free_inode(0);
             }
             else {
@@ -255,7 +255,7 @@ slist_t *directory_list(const char *path) {
 }
 
 slist_t *get_directory_list(inode_t* dd) {
-    assert(dd->mode == 1);
+    assert(S_ISDIR(dd->mode));
 
     slist_t* list = NULL;
 

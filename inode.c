@@ -27,7 +27,7 @@ inode_t *get_inode(int inum) {
     return (inode_t *) inode;
 }
 
-int alloc_inode() {
+int alloc_inode(int mode) {
   void *bbm = get_inode_bitmap();
   for (int i = 0; i < DATABLOCK_COUNT; ++i) {
     if (!bitmap_get(bbm, i)) {
@@ -36,7 +36,7 @@ int alloc_inode() {
       inode_t* new_inode = get_inode(i);
       new_inode->refs = 1;
       new_inode->fid = i;
-      new_inode->mode = 0;
+      new_inode->mode = mode;
       new_inode->size = 0;
       new_inode->block_0 = alloc_block();
       new_inode->block_1 = -1;

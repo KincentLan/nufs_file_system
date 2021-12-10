@@ -36,13 +36,11 @@ int nufs_access(const char *path, int mask) {
 // This is a crucial function.
 int nufs_getattr(const char *path, struct stat *st) {
   int rv = 0;
-  int directory_mode = 040755;
-  int file_mode = 0100644;
   // Return some metadata for the root directory...
   int inode_no = tree_lookup(path);
   if (inode_no >= 0) {
     inode_t* current_item = get_inode(inode_no);
-    st->st_mode = (current_item->mode == 0) ? file_mode : directory_mode;
+    st->st_mode = current_item->mode;
     st->st_size = current_item->size;
     st->st_uid = getuid();
   } 
@@ -64,17 +62,18 @@ int nufs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
   slist_t* dir_list = directory_list(path);
   if (dir_list == NULL) {
     printf("Directory is empty.\n");
+    printf("readdir(%s) -> %d\n", path, rv);
+    return 0;
   }
 
   rv = nufs_getattr(path, &st);
-  filler(buf, ".", &st, 0);
+  filler(buf, path, &st, 0);
   while (dir_list != NULL) {
     assert(rv == 0);
     if (strcmp(dir_list->data, ".") == 0 || strcmp(dir_list->data, "..") == 0) {
       dir_list = dir_list->next;
     }
     else {
-
       char *result = malloc(strlen(path) + strlen(dir_list->data) + 2);
       strcpy(result, path);
       if (path[strlen(path) - 1] != '/') {
@@ -85,12 +84,9 @@ int nufs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
       assert(rv == 0);
       filler(buf, result, &st, 0);
       free(result);
-      dir_list = dir_list->next;
-      
+      dir_list = dir_list->next; 
     }
-    
   }
-
   printf("readdir(%s) -> %d\n", path, rv);
   return 0;
 }
@@ -101,6 +97,26 @@ int nufs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 // function.
 int nufs_mknod(const char *path, mode_t mode, dev_t rdev) {
   int rv = -1;
+
+  int file_inode_idx = alloc_inode(mode);
+
+  char* parent_path = malloc(strlen(path) + 1);
+  strcpy(parent_path, path);
+  char* last_slash = strrchr(parent_path, '/');
+  *(last_slash) = '\0';
+
+  char name[FILENAME_MAX];
+  strcpy(name, last_slash+1);
+  
+  int dir_inode_idx = tree_lookup(parent_path);
+
+  if (dir_inode_idx == -1 || file_inode_idx == -1) {
+    return -1;
+  }
+
+  inode_t* dir_inode = get_inode(dir_inode_idx);
+
+  rv = directory_put(dir_inode, name, file_inode_idx);
   printf("mknod(%s, %04o) -> %d\n", path, mode, rv);
   return rv;
 }
