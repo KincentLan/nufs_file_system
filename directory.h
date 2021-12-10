@@ -3,17 +3,15 @@
 // Feel free to use as inspiration.
 
 // based on cs3650 starter code
-
-#ifndef DIRECTORY_H
-#define DIRECTORY_H
-
+#ifndef DIRENT_H
+#define DIRENT_H
 #define DIR_NAME_LENGTH 48
 
 #include "blocks.h"
 #include "inode.h"
 #include "slist.h"
 
-typedef struct dirent {
+typedef struct directory {
   char name[DIR_NAME_LENGTH];
   int inum;
   char _reserved[12];

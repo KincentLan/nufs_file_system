@@ -144,6 +144,7 @@ int shrink_inode(inode_t *node, int size) {
     }
 
     node->size = total_size;
+    return 0;
 }
 
 int needed_datablocks(int total_size, int offset) {

@@ -9,12 +9,15 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <stdlib.h>
 
 #define FUSE_USE_VERSION 26
 #include <fuse.h>
 
 #include "blocks.h"
 #include "directory.h"
+#include "utils.h"
+
 // implementation for: man 2 access
 // Checks if a file exists.
 int nufs_access(const char *path, int mask) {
@@ -57,37 +60,28 @@ int nufs_getattr(const char *path, struct stat *st) {
 int nufs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
                  off_t offset, struct fuse_file_info *fi) {
   struct stat st;
-  int rv;
+  int rv = nufs_getattr(path, &st);
+  assert(rv == 0);
+  filler(buf, ".", &st, 0);
 
   slist_t* dir_list = directory_list(path);
-  if (dir_list == NULL) {
-    printf("Directory is empty.\n");
-    printf("readdir(%s) -> %d\n", path, rv);
-    return 0;
-  }
+  char parent_path[20 * FILENAME_MAX];
 
-  rv = nufs_getattr(path, &st);
-  filler(buf, path, &st, 0);
   while (dir_list != NULL) {
-    assert(rv == 0);
-    if (strcmp(dir_list->data, ".") == 0 || strcmp(dir_list->data, "..") == 0) {
+    if (strcmp(dir_list->data, ".") == 0 || strcmp(dir_list->data, "..") == 0 ) {
       dir_list = dir_list->next;
+      continue;
     }
-    else {
-      char *result = malloc(strlen(path) + strlen(dir_list->data) + 2);
-      strcpy(result, path);
-      if (path[strlen(path) - 1] != '/') {
-        strcat(result, "/");
-      }
-      strcat(result, dir_list->data);
-      rv = nufs_getattr(result, &st);
-      assert(rv == 0);
-      filler(buf, result, &st, 0);
-      free(result);
-      dir_list = dir_list->next; 
-    }
+
+    char true_path[20 * FILENAME_MAX];
+    strcpy(true_path, parent_path);
+    strcat(true_path, dir_list->data);
+    rv = nufs_getattr(true_path, &st);
+    assert(rv == 0);
+    filler(buf, dir_list->data, &st, 0);
+    dir_list = dir_list->next;
   }
-  printf("readdir(%s) -> %d\n", path, rv);
+  
   return 0;
 }
 
@@ -98,25 +92,33 @@ int nufs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 int nufs_mknod(const char *path, mode_t mode, dev_t rdev) {
   int rv = -1;
 
-  int file_inode_idx = alloc_inode(mode);
+  int item_idx;
 
-  char* parent_path = malloc(strlen(path) + 1);
-  strcpy(parent_path, path);
-  char* last_slash = strrchr(parent_path, '/');
-  *(last_slash) = '\0';
+  if (S_ISREG(mode)) {
+    item_idx = alloc_inode(mode);
+  }
+  else if (S_ISDIR(mode)) {
+    item_idx = directory_create(mode);
+  }
+
+  char parent_path[20 * FILENAME_MAX];
+  get_parent_path(path, parent_path);
 
   char name[FILENAME_MAX];
-  strcpy(name, last_slash+1);
-  
+  get_base_name(path, name);
+
+  printf("%s\n", parent_path);
+
   int dir_inode_idx = tree_lookup(parent_path);
 
-  if (dir_inode_idx == -1 || file_inode_idx == -1) {
+  if (dir_inode_idx == -1 || item_idx == -1) {
     return -1;
   }
 
   inode_t* dir_inode = get_inode(dir_inode_idx);
 
-  rv = directory_put(dir_inode, name, file_inode_idx);
+  rv = directory_put(dir_inode, name, item_idx);
+
   printf("mknod(%s, %04o) -> %d\n", path, mode, rv);
   return rv;
 }
@@ -131,6 +133,23 @@ int nufs_mkdir(const char *path, mode_t mode) {
 
 int nufs_unlink(const char *path) {
   int rv = -1;
+
+  char parent_path[20 * FILENAME_MAX];
+  get_parent_path(path, parent_path);
+
+  char name[FILENAME_MAX];
+  get_base_name(path, name);
+
+  int dir_inode_idx = tree_lookup(parent_path);
+
+  if (dir_inode_idx == -1) {
+    return -1;
+  }
+
+  inode_t* dir_inode = get_inode(dir_inode_idx);
+
+  rv = directory_delete(dir_inode, name);
+
   printf("unlink(%s) -> %d\n", path, rv);
   return rv;
 }
@@ -142,7 +161,11 @@ int nufs_link(const char *from, const char *to) {
 }
 
 int nufs_rmdir(const char *path) {
+  if (strcmp(path, "/") == 0) {
+    return -1;
+  }
   int rv = -1;
+  rv = nufs_unlink(path);
   printf("rmdir(%s) -> %d\n", path, rv);
   return rv;
 }
@@ -237,8 +260,8 @@ int main(int argc, char *argv[]) {
   assert(argc > 2 && argc < 6);
   printf("TODO: mount %s as data file\n", argv[--argc]);
   // storage_init(argv[--argc]);
-  blocks_init(argv[--argc]);
-
+  blocks_init("data.nufs");
+  directory_init();
   nufs_init_ops(&nufs_ops);
   return fuse_main(argc, argv, &nufs_ops, NULL);
 }

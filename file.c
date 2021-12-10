@@ -1,8 +1,9 @@
 #include <assert.h>
+#include <stdlib.h>
+
 #include "file.h"
 #include "constants.h"
-
-const int BLOCK_SIZE = 4096; // = 4K
+#include "blocks.h"
 
 char** get_file_blocks(inode_t *file) {
     int num_dirs = needed_datablocks(file->size, 0);
