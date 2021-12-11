@@ -1,8 +1,3 @@
-// Directory manipulation functions.
-//
-// Feel free to use as inspiration.
-
-// based on cs3650 starter code
 #ifndef DIRENT_H
 #define DIRENT_H
 #define DIR_NAME_LENGTH 48
@@ -17,7 +12,6 @@ typedef struct directory {
   char _reserved[12];
 } dirent_t;
 
-void directory_init();
 int get_main_directory();
 int directory_create();
 int directory_lookup(inode_t *dd, const char *name);
