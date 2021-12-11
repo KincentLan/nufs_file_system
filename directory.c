@@ -72,16 +72,14 @@ int directory_lookup(inode_t *dd, const char *name) {
 }
 
 int tree_lookup(const char *path) {
-    int main_directory = get_main_directory();
-
     if (strcmp(path, "/") == 0) {
-        return main_directory;
+        return 0;
     }
 
     char* copy = strdup(path);
     char *pch = strtok(copy, "/");
     
-    inode_t* current_inode = get_inode(main_directory);
+    inode_t* current_inode = get_inode(0);
     int current_inode_idx = -1;
 
     while (pch != NULL) {
