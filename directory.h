@@ -22,6 +22,7 @@ int get_main_directory();
 int directory_create();
 int directory_lookup(inode_t *dd, const char *name);
 int tree_lookup(const char *path);
+int directory_unlink(inode_t *dd, const char *name);
 int directory_put(inode_t *dd, const char *name, int inum);
 int directory_delete(inode_t *dd, const char *name);
 slist_t *directory_list(const char *path);

@@ -23,7 +23,7 @@ void print_inode(inode_t *node);
 
 inode_t *get_inode(int inum);
 
-int alloc_inode();
+int alloc_inode(int mode);
 
 int dup_inode(inode_t *node);
 

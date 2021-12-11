@@ -9,21 +9,21 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
-#include <stdlib.h>
 
 #define FUSE_USE_VERSION 26
 #include <fuse.h>
 
+#include "utils.h"
 #include "blocks.h"
 #include "directory.h"
-#include "utils.h"
+#include "slist.h"
+#include "file.h"
 
 // implementation for: man 2 access
 // Checks if a file exists.
 int nufs_access(const char *path, int mask) {
   int rv = 0;
-  
-  // Only the root directory and our simulated file are accessible for now...
+
   if (tree_lookup(path) >= 0) {
     rv = 0;
   } else { // ...others do not exist
@@ -39,17 +39,23 @@ int nufs_access(const char *path, int mask) {
 // This is a crucial function.
 int nufs_getattr(const char *path, struct stat *st) {
   int rv = 0;
+
+  char parent_path[50 * FILENAME_MAX];
+  get_parent_path(path, parent_path);
+  char name[FILENAME_MAX];
+  get_base_name(path, name);
+
   // Return some metadata for the root directory...
-  int inode_no = tree_lookup(path);
-  if (inode_no >= 0) {
-    inode_t* current_item = get_inode(inode_no);
-    st->st_mode = current_item->mode;
-    st->st_size = current_item->size;
-    st->st_uid = getuid();
-  } 
-  else { // ...other files do not exist on this filesystem
-    rv = -ENOENT;
+  int inode_idx = tree_lookup(path);
+  if (inode_idx < 0) {
+    return -ENOENT;
   }
+  
+  inode_t* inode = get_inode(inode_idx);
+  st->st_mode = inode->mode; // directory
+  st->st_size = inode->size;
+  st->st_uid = getuid();
+
   printf("getattr(%s) -> (%d) {mode: %04o, size: %ld}\n", path, rv, st->st_mode,
          st->st_size);
   return rv;
@@ -60,28 +66,30 @@ int nufs_getattr(const char *path, struct stat *st) {
 int nufs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
                  off_t offset, struct fuse_file_info *fi) {
   struct stat st;
-  int rv = nufs_getattr(path, &st);
+  int rv;
+
+  rv = nufs_getattr(path, &st);
   assert(rv == 0);
   filler(buf, ".", &st, 0);
 
   slist_t* dir_list = directory_list(path);
-  char parent_path[20 * FILENAME_MAX];
-
   while (dir_list != NULL) {
-    if (strcmp(dir_list->data, ".") == 0 || strcmp(dir_list->data, "..") == 0 ) {
-      dir_list = dir_list->next;
-      continue;
+    char relative_path[50 * FILENAME_MAX];
+    strcpy(relative_path, path);
+
+    if (strcmp(path, "/") != 0) {
+      strcat(relative_path, "/");
     }
 
-    char true_path[20 * FILENAME_MAX];
-    strcpy(true_path, parent_path);
-    strcat(true_path, dir_list->data);
-    rv = nufs_getattr(true_path, &st);
+    strcat(relative_path, dir_list->data);
+
+    rv = nufs_getattr(relative_path, &st);
     assert(rv == 0);
     filler(buf, dir_list->data, &st, 0);
     dir_list = dir_list->next;
   }
-  
+
+  printf("readdir(%s) -> %d\n", path, rv);
   return 0;
 }
 
@@ -92,33 +100,14 @@ int nufs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 int nufs_mknod(const char *path, mode_t mode, dev_t rdev) {
   int rv = -1;
 
-  int item_idx;
-
-  if (S_ISREG(mode)) {
-    item_idx = alloc_inode(mode);
-  }
-  else if (S_ISDIR(mode)) {
-    item_idx = directory_create(mode);
-  }
-
-  char parent_path[20 * FILENAME_MAX];
+  char parent_path[50 * FILENAME_MAX];
   get_parent_path(path, parent_path);
-
   char name[FILENAME_MAX];
   get_base_name(path, name);
 
-  printf("%s\n", parent_path);
-
-  int dir_inode_idx = tree_lookup(parent_path);
-
-  if (dir_inode_idx == -1 || item_idx == -1) {
-    return -1;
-  }
-
-  inode_t* dir_inode = get_inode(dir_inode_idx);
-
-  rv = directory_put(dir_inode, name, item_idx);
-
+  inode_t* parent_inode = get_inode(tree_lookup(parent_path));
+  int inode_idx = alloc_inode(mode);
+  rv = directory_put(parent_inode, name, inode_idx);
   printf("mknod(%s, %04o) -> %d\n", path, mode, rv);
   return rv;
 }
@@ -134,22 +123,13 @@ int nufs_mkdir(const char *path, mode_t mode) {
 int nufs_unlink(const char *path) {
   int rv = -1;
 
-  char parent_path[20 * FILENAME_MAX];
+  char parent_path[50 * FILENAME_MAX];
   get_parent_path(path, parent_path);
-
   char name[FILENAME_MAX];
   get_base_name(path, name);
 
-  int dir_inode_idx = tree_lookup(parent_path);
-
-  if (dir_inode_idx == -1) {
-    return -1;
-  }
-
-  inode_t* dir_inode = get_inode(dir_inode_idx);
-
-  rv = directory_delete(dir_inode, name);
-
+  inode_t* parent_inode = get_inode(tree_lookup(parent_path));
+  rv = directory_delete(parent_inode, name);
   printf("unlink(%s) -> %d\n", path, rv);
   return rv;
 }
@@ -161,11 +141,7 @@ int nufs_link(const char *from, const char *to) {
 }
 
 int nufs_rmdir(const char *path) {
-  if (strcmp(path, "/") == 0) {
-    return -1;
-  }
-  int rv = -1;
-  rv = nufs_unlink(path);
+  int rv = nufs_unlink(path);
   printf("rmdir(%s) -> %d\n", path, rv);
   return rv;
 }
@@ -174,6 +150,25 @@ int nufs_rmdir(const char *path) {
 // called to move a file within the same filesystem
 int nufs_rename(const char *from, const char *to) {
   int rv = -1;
+
+  char parent_path[50 * FILENAME_MAX];
+  get_parent_path(from, parent_path);
+  char name[FILENAME_MAX];
+  get_base_name(from, name);
+
+  int item_inode_idx = tree_lookup(from);
+  inode_t* parent_inode = get_inode(tree_lookup(parent_path));
+  rv = directory_unlink(parent_inode, name);
+  if (rv < 0) {
+    return -1;
+  }
+
+  get_parent_path(to, parent_path);
+  get_base_name(to, name);
+
+  parent_inode = get_inode(tree_lookup(parent_path));
+  rv = directory_put(parent_inode, name, item_inode_idx);
+
   printf("rename(%s => %s) -> %d\n", from, to, rv);
   return rv;
 }
@@ -203,8 +198,11 @@ int nufs_open(const char *path, struct fuse_file_info *fi) {
 // Actually read data
 int nufs_read(const char *path, char *buf, size_t size, off_t offset,
               struct fuse_file_info *fi) {
-  int rv = 6;
-  strcpy(buf, "hello\n");
+  int rv = -1;
+  inode_t* inode = get_inode(tree_lookup(path));
+  if (read_file(inode, buf, size, offset) == 0) {
+    rv = size;
+  }
   printf("read(%s, %ld bytes, @+%ld) -> %d\n", path, size, offset, rv);
   return rv;
 }
@@ -213,6 +211,10 @@ int nufs_read(const char *path, char *buf, size_t size, off_t offset,
 int nufs_write(const char *path, const char *buf, size_t size, off_t offset,
                struct fuse_file_info *fi) {
   int rv = -1;
+  inode_t* inode = get_inode(tree_lookup(path));
+  if (overwrite_file(inode, buf, size, offset) == 0) {
+    rv = size;
+  }
   printf("write(%s, %ld bytes, @+%ld) -> %d\n", path, size, offset, rv);
   return rv;
 }
@@ -258,10 +260,7 @@ struct fuse_operations nufs_ops;
 
 int main(int argc, char *argv[]) {
   assert(argc > 2 && argc < 6);
-  printf("TODO: mount %s as data file\n", argv[--argc]);
-  // storage_init(argv[--argc]);
-  blocks_init("data.nufs");
-  directory_init();
+  blocks_init(argv[--argc]);
   nufs_init_ops(&nufs_ops);
   return fuse_main(argc, argv, &nufs_ops, NULL);
 }

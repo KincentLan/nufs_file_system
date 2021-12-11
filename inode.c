@@ -32,7 +32,6 @@ int alloc_inode(int mode) {
   for (int i = 0; i < DATABLOCK_COUNT; ++i) {
     if (!bitmap_get(bbm, i)) {
       bitmap_put(bbm, i, 1);
-      printf("+ alloc_inode_block() -> %d\n", i);
       inode_t* new_inode = get_inode(i);
       new_inode->refs = 1;
       new_inode->fid = i;
@@ -94,57 +93,57 @@ void free_inode(int inum) {
 }
 
 int grow_inode(inode_t *node, int size) {
-    assert(size > 0);
+  assert(size > 0);
 
-    int total_size = node->size + size;
-    if (node->block_0 == -1) {
-        node->block_0 = alloc_block();
-    }
-    if (total_size > BLOCK_SIZE && node->block_1 == -1) {
-        node->block_1 = alloc_block();
-    }
-    if (total_size > 2 * BLOCK_SIZE && node->rd_block == -1) {
-        node->rd_block = alloc_block();
-        int *block_array = blocks_get_block(node->rd_block);
-        int num_datablocks = needed_datablocks(total_size, 2 * BLOCK_SIZE);
-        if (num_datablocks > 255) {
-            perror("Not enough memory to store file.\n");
-            return -1;
-        }
-        for (int i = 0; i < num_datablocks; i++) {
-            block_array[i] = alloc_block();
-        }
-    }
-    node->size = total_size;
-    return 0;
+  int total_size = node->size + size;
+  if (node->block_0 == -1) {
+      node->block_0 = alloc_block();
+  }
+  if (total_size > BLOCK_SIZE && node->block_1 == -1) {
+      node->block_1 = alloc_block();
+  }
+  if (total_size > 2 * BLOCK_SIZE && node->rd_block == -1) {
+      node->rd_block = alloc_block();
+      int *block_array = blocks_get_block(node->rd_block);
+      int num_datablocks = needed_datablocks(total_size, 2 * BLOCK_SIZE);
+      if (num_datablocks > 255) {
+          perror("Not enough memory to store file.\n");
+          return -1;
+      }
+      for (int i = 0; i < num_datablocks; i++) {
+          block_array[i] = alloc_block();
+      }
+  }
+  node->size = total_size;
+  return 0;
 }
 
 int shrink_inode(inode_t *node, int size) {
-    assert(size > 0);
-    assert(node->block_0 != -1);
-    
-    int total_size = node->size - size;
-    if (node->size > 2 * BLOCK_SIZE && node->rd_block != -1) {
-        int num_datablocks = needed_datablocks(node->size, 2 * BLOCK_SIZE);
-        int goal_datablocks = needed_datablocks(total_size, 2 * BLOCK_SIZE);
-        int *block_array = blocks_get_block(node->rd_block);
-        for (int i = num_datablocks - 1; i >= goal_datablocks; i--) {
-            free_block(block_array[i]);
-            block_array[i] = 0;
-        }
-        if (goal_datablocks == 0) {
-            free_block(node->rd_block);
-            node->rd_block = -1;
-        }
-    }
+  assert(size > 0);
+  assert(node->block_0 != -1);
+  
+  int total_size = node->size - size;
+  if (node->size > 2 * BLOCK_SIZE && node->rd_block != -1) {
+      int num_datablocks = needed_datablocks(node->size, 2 * BLOCK_SIZE);
+      int goal_datablocks = needed_datablocks(total_size, 2 * BLOCK_SIZE);
+      int *block_array = blocks_get_block(node->rd_block);
+      for (int i = num_datablocks - 1; i >= goal_datablocks; i--) {
+          free_block(block_array[i]);
+          block_array[i] = 0;
+      }
+      if (goal_datablocks == 0) {
+          free_block(node->rd_block);
+          node->rd_block = -1;
+      }
+  }
 
-    if (total_size <= BLOCK_SIZE && node->block_1 != -1) {
-        free_block(node->block_1);
-        node->block_1 = -1;
-    }
+  if (total_size <= BLOCK_SIZE && node->block_1 != -1) {
+      free_block(node->block_1);
+      node->block_1 = -1;
+  }
 
-    node->size = total_size;
-    return 0;
+  node->size = total_size;
+  return 0;
 }
 
 int needed_datablocks(int total_size, int offset) {

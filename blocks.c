@@ -29,6 +29,8 @@ const int BLOCK_BITMAP_SIZE = BLOCK_COUNT / 8;
 static int blocks_fd = -1;
 static void *blocks_base = 0;
 
+static int main_directory = -1;
+
 // Get the number of blocks needed to store the given number of bytes.
 int bytes_to_blocks(int bytes) {
   int quo = bytes / BLOCK_SIZE;
@@ -60,6 +62,12 @@ void blocks_init(const char *image_path) {
   for (int i = 1; i <= INODE_COUNT; i++) {
     bitmap_put(bbm, i, 1);
   }
+
+  main_directory = alloc_inode(S_IFDIR);
+}
+
+int get_main_directory() {
+  return main_directory;
 }
 
 // Close the disk image.
@@ -103,7 +111,6 @@ int alloc_block() {
   for (int ii = 1; ii < BLOCK_COUNT; ++ii) {
     if (!bitmap_get(bbm, ii)) {
       bitmap_put(bbm, ii, 1);
-      printf("+ alloc_block() -> %d\n", ii);
       return ii;
     }
   }
@@ -113,7 +120,6 @@ int alloc_block() {
 
 // Deallocate the block with the given index.
 void free_block(int bnum) {
-  printf("+ free_block(%d)\n", bnum);
   void *bbm = get_blocks_bitmap();
   bitmap_put(bbm, bnum, 0);
 }

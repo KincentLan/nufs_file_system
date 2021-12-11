@@ -29,6 +29,8 @@ void *get_blocks_bitmap();
 // Return a pointer to the beginning of the inode table bitmap.
 void *get_inode_bitmap();
 
+int get_main_directory();
+
 // Allocate a new block and return its index.
 int alloc_block();
 

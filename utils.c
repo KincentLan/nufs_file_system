@@ -10,11 +10,6 @@ void get_parent_path(const char* path, char* buf) {
 }
 
 void get_base_name(const char* path, char* buf) {
-  if (strcmp(path, "/") == 0) {
-      strcpy(buf, "~");
-  }
-  else {
-    char* last_slash = (char*) strrchr(path, '/');
-    strcpy(buf, last_slash+1);
-  }
+  char* last_slash = (char*) strrchr(path, '/');
+  strcpy(buf, last_slash+1);
 }
